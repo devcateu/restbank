@@ -1,12 +1,12 @@
-package pl.slawek.restbank.infrastructure.endpoints;
+package pl.slawek.restbank.infrastructure.endpoints.rest;
 
 import java.util.List;
 
-public class Response {
+public class RestfullResponse {
     private Object data;
     private List<Link> links;
 
-    public Response(Object data, List<Link> links) {
+    public RestfullResponse(Object data, List<Link> links) {
         this.data = data;
         this.links = links;
     }

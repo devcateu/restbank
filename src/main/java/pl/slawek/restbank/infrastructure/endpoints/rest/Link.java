@@ -1,4 +1,4 @@
-package pl.slawek.restbank.infrastructure.endpoints;
+package pl.slawek.restbank.infrastructure.endpoints.rest;
 
 public class Link {
     private String type;

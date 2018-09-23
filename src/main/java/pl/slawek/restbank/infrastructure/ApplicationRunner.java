@@ -22,6 +22,6 @@ public class ApplicationRunner {
 
     public static void main(String... args) {
         final ApplicationRunner applicationRunner = new ApplicationRunner();
-        applicationRunner.endpoints.start();
+        applicationRunner.endpoints.registerAllEndpoints();
     }
 }

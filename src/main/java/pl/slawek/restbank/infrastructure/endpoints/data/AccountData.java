@@ -1,4 +1,4 @@
-package pl.slawek.restbank.infrastructure.endpoints;
+package pl.slawek.restbank.infrastructure.endpoints.data;
 
 import pl.slawek.restbank.domain.Account;
 

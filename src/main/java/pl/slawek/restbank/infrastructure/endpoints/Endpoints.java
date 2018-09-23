@@ -6,18 +6,19 @@ import com.fasterxml.jackson.databind.exc.MismatchedInputException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import pl.slawek.restbank.application.*;
-import pl.slawek.restbank.common.BusinessException;
-import pl.slawek.restbank.common.Money;
-import pl.slawek.restbank.common.OwnerId;
-import pl.slawek.restbank.common.ValidationException;
+import pl.slawek.restbank.common.*;
 import pl.slawek.restbank.domain.*;
-import spark.Filter;
-import spark.Request;
-import spark.Spark;
+import pl.slawek.restbank.infrastructure.endpoints.data.*;
+import pl.slawek.restbank.infrastructure.endpoints.rest.EndpointDefinition;
+import pl.slawek.restbank.infrastructure.endpoints.rest.HttpMethod;
+import pl.slawek.restbank.infrastructure.endpoints.rest.Link;
+import pl.slawek.restbank.infrastructure.endpoints.rest.RestfullResponse;
+import spark.*;
 
 import java.lang.invoke.MethodHandles;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Function;
 
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST;
 import static java.net.HttpURLConnection.HTTP_INTERNAL_ERROR;
@@ -27,14 +28,14 @@ import static spark.Spark.*;
 public class Endpoints {
     private static final Logger LOGGER = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
     private static final String CONTENT_TYPE = "application/json";
-    private static final String CREATE_ACCOUNT_LINK = "/account/";
-    private static final String GET_ACCOUNT_LINK = "/account/:accountNumber";
-    private static final String CREATE_OUTGOING_TRANSACTION_LINK = "/account/:accountNumber/transaction/";
-    private static final String CREATE_INCOMING_TRANSACTION_LINK = "/account/:accountNumber/income/";
-    private static final String GET_ALL_TRANSACTIONS_LINK = "/account/:accountNumber/transaction/";
-    private static final String GET_TRANSACTION_LINK = "/account/:accountNumber/transaction/:transactionId";
-    private static final String SETTLE_TRANSACTION_LINK = "/account/:accountNumber/transaction/:transactionId/settle";
-    private static final String REJECT_TRANSACTION_LINK = "/account/:accountNumber/transaction/:transactionId/settle";
+    private static final EndpointDefinition CREATE_ACCOUNT = new EndpointDefinition("/account/", HttpMethod.POST);
+    private static final EndpointDefinition GET_ACCOUNT = new EndpointDefinition("/account/:accountNumber", HttpMethod.GET);
+    private static final EndpointDefinition CREATE_OUTGOING_TRANSACTION = new EndpointDefinition("/account/:accountNumber/transaction/", HttpMethod.POST);
+    private static final EndpointDefinition CREATE_INCOMING_TRANSACTION = new EndpointDefinition("/account/:accountNumber/income/", HttpMethod.POST);
+    private static final EndpointDefinition GET_ALL_TRANSACTIONS = new EndpointDefinition("/account/:accountNumber/transaction/", HttpMethod.GET);
+    private static final EndpointDefinition GET_TRANSACTION = new EndpointDefinition("/account/:accountNumber/transaction/:transactionId", HttpMethod.GET);
+    private static final EndpointDefinition SETTLE_TRANSACTION = new EndpointDefinition("/account/:accountNumber/transaction/:transactionId/settle", HttpMethod.POST);
+    private static final EndpointDefinition REJECT_TRANSACTION = new EndpointDefinition("/account/:accountNumber/transaction/:transactionId/settle", HttpMethod.DELETE);
     private final TransactionRepository transactionRepository;
     private final AccountRepository accountRepository;
     private final CreateAccountUseCase createAccountUseCase;
@@ -42,7 +43,6 @@ public class Endpoints {
     private final ReceiveIncomingTransactionUseCase receiveIncomingTransactionUseCase;
     private final RejectTransactionUseCase rejectTransactionUseCase;
     private final SettleTransactionUseCase settleTransactionUseCase;
-
     private ObjectMapper objectMapper = new ObjectMapper();
 
     public Endpoints(TransactionRepository transactionRepository,
@@ -61,99 +61,107 @@ public class Endpoints {
         this.settleTransactionUseCase = settleTransactionUseCase;
     }
 
-    public void start() {
+    public void registerAllEndpoints() {
         after((Filter) (request, response) -> response.type(CONTENT_TYPE));
-        post(CREATE_ACCOUNT_LINK, CONTENT_TYPE, (req, res) -> {
-            final CreateAccount createAccount = mapBody(req, CreateAccount.class);
-            final Account account = createAccountUseCase.create(OwnerId.of(createAccount.getOwner()));
-            res.status(201);
-            return getAccountResponse(account);
-        });
-        get(GET_ACCOUNT_LINK, (req, res) -> {
-            final AccountNumber accountNumber = getAccountNumber(req);
-            final Account account = accountRepository.getBy(accountNumber);
-            if (account == null) {
-                res.status(404);
-                return getMessage("Account Not Found");
-            }
-            return getAccountResponse(account);
-        });
-        post(CREATE_OUTGOING_TRANSACTION_LINK, CONTENT_TYPE, (req, res) -> {
-            final AccountNumber accountNumber = getAccountNumber(req);
-            final MakeOutgoingTransactionData makeOutgoingTransactionData = mapBody(req, MakeOutgoingTransactionData.class);
-            final Transaction transaction = makeOutgoingTransaction(accountNumber, makeOutgoingTransactionData);
-            res.status(201);
-            return getTransactionStringResponse(transaction);
-        });
-        post(CREATE_INCOMING_TRANSACTION_LINK, CONTENT_TYPE, (req, res) -> {
-            final AccountNumber accountNumber = getAccountNumber(req);
-            final MakeIncomingTransactionData makeIncomingTransactionData = mapBody(req, MakeIncomingTransactionData.class);
-            final Transaction transaction = makeIncomingTransaction(accountNumber, makeIncomingTransactionData);
-            res.status(201);
-            return getTransactionStringResponse(transaction);
-        });
-        get(GET_ALL_TRANSACTIONS_LINK, (req, res) -> {
-            final AccountNumber accountNumber = getAccountNumber(req);
-            if (!accountRepository.exist(accountNumber)) {
-                res.status(404);
-                return getMessage("Account Not Found");
-            }
-            final List<Transaction> transaction = transactionRepository.getAll(accountNumber);
-            return getResponseForListOfTransactions(transaction.stream()
-                    .map(this::getTransactionResponse)
-                    .collect(toList()), accountNumber);
-        });
-        get(GET_TRANSACTION_LINK, (req, res) -> {
-            final AccountNumber accountNumber = getAccountNumber(req);
-            final TransactionId transactionId = getTransactionId(req);
-            final Transaction transaction = transactionRepository.getBy(accountNumber, transactionId);
+        registerEndpoint(CREATE_ACCOUNT, this::createAccount);
+        registerEndpoint(GET_ACCOUNT, this::getAccount);
+        registerEndpoint(CREATE_OUTGOING_TRANSACTION, this::createOutgoingTransaction);
+        registerEndpoint(CREATE_INCOMING_TRANSACTION, this::createIncomingTransaction);
+        registerEndpoint(GET_ALL_TRANSACTIONS, this::getAllTransactions);
+        registerEndpoint(GET_TRANSACTION, this::getTransaction);
+        registerEndpoint(SETTLE_TRANSACTION, (req, res) -> settleTransaction(req));
+        registerEndpoint(REJECT_TRANSACTION, (req, res) -> rejectTransaction(req));
 
-            if (transaction == null) {
-                res.status(404);
-                return getMessage("Transaction Not Found");
-            }
-            return getTransactionStringResponse(transaction);
-        });
-        post(SETTLE_TRANSACTION_LINK, CONTENT_TYPE, (req, res) -> {
-            final AccountNumber accountNumber = getAccountNumber(req);
-            final TransactionId transactionId = getTransactionId(req);
-            final Transaction transaction = settleTransactionUseCase.settle(accountNumber, transactionId);
-            return getTransactionStringResponse(transaction);
-        });
-        Spark.
-        delete(REJECT_TRANSACTION_LINK, CONTENT_TYPE, (req, res) -> {
-            final AccountNumber accountNumber = getAccountNumber(req);
-            final TransactionId transactionId = getTransactionId(req);
-            final Transaction transaction = rejectTransactionUseCase.reject(accountNumber, transactionId);
-            return getTransactionStringResponse(transaction);
-        });
-
-        exception(MismatchedInputException.class, (e, request, response) -> {
-            LOGGER.warn("Wrong user data", e);
-            response.type(CONTENT_TYPE);
-            response.body(getMessage("Wrong message"));
-            response.status(HTTP_BAD_REQUEST);
-        });
-        exception(BusinessException.class, (e, request, response) -> {
-            LOGGER.warn("Wrong user data", e);
-            exceptionBodyWriter(e, response);
-            response.status(HTTP_BAD_REQUEST);
-        });
-        exception(ValidationException.class, (e, request, response) -> {
-            LOGGER.warn("Wrong user data validation", e);
-            exceptionBodyWriter(e, response);
-            response.status(HTTP_BAD_REQUEST);
-        });
+        exception(MismatchedInputException.class, (e, request, response) -> bedRequest(e, response, ex -> "Wrong input format"));
+        exception(BusinessException.class, (e, request, response) -> bedRequest(e, response, Throwable::getMessage));
+        exception(ValidationException.class, (e, request, response) -> bedRequest(e, response, Throwable::getMessage));
         exception(Exception.class, (e, request, response) -> {
-            LOGGER.error("Error", e);
-            exceptionBodyWriter(e, response);
+            LOGGER.error("Internal server error", e);
+            exceptionBodyWriter(response, e.getMessage());
             response.status(HTTP_INTERNAL_ERROR);
         });
     }
 
-    private void exceptionBodyWriter(Exception e, spark.Response response) {
+    private Object rejectTransaction(Request req) throws TransactionDoesNotExist, CannotChangeStatusOfTransactionException {
+        final AccountNumber accountNumber = getAccountNumber(req);
+        final TransactionId transactionId = getTransactionId(req);
+        final Transaction transaction = rejectTransactionUseCase.reject(accountNumber, transactionId);
+        return mapToResponse(transaction);
+    }
+
+    private Object settleTransaction(Request req) throws TransactionDoesNotExist, CannotChangeStatusOfTransactionException {
+        final AccountNumber accountNumber = getAccountNumber(req);
+        final TransactionId transactionId = getTransactionId(req);
+        final Transaction transaction = settleTransactionUseCase.settle(accountNumber, transactionId);
+        return mapToResponse(transaction);
+    }
+
+    private Object getTransaction(Request req, Response res) {
+        final AccountNumber accountNumber = getAccountNumber(req);
+        final TransactionId transactionId = getTransactionId(req);
+        final Transaction transaction = transactionRepository.getBy(accountNumber, transactionId);
+
+        if (transaction == null) {
+            res.status(404);
+            return getMessage("Transaction Not Found");
+        }
+        return mapToResponse(transaction);
+    }
+
+    private Object getAllTransactions(Request req, Response res) {
+        final AccountNumber accountNumber = getAccountNumber(req);
+        if (!accountRepository.exist(accountNumber)) {
+            res.status(404);
+            return getMessage("Account Not Found");
+        }
+        final List<Transaction> transaction = transactionRepository.getAll(accountNumber);
+        return getResponseForListOfTransactions(transaction.stream()
+                .map(this::mapToResponse)
+                .collect(toList()), accountNumber);
+    }
+
+    private Object createIncomingTransaction(Request req, Response res) throws java.io.IOException, BusinessException {
+        final AccountNumber accountNumber = getAccountNumber(req);
+        final MakeIncomingTransactionData makeIncomingTransactionData = mapBody(req, MakeIncomingTransactionData.class);
+        final Transaction transaction = makeIncomingTransaction(accountNumber, makeIncomingTransactionData);
+        res.status(201);
+        return mapToResponse(transaction);
+    }
+
+    private Object createOutgoingTransaction(Request req, Response res) throws java.io.IOException, BusinessException {
+        final AccountNumber accountNumber = getAccountNumber(req);
+        final MakeOutgoingTransactionData makeOutgoingTransactionData = mapBody(req, MakeOutgoingTransactionData.class);
+        final Transaction transaction = makeOutgoingTransaction(accountNumber, makeOutgoingTransactionData);
+        res.status(201);
+        return mapToResponse(transaction);
+    }
+
+    private Object getAccount(Request req, Response res) {
+        final AccountNumber accountNumber = getAccountNumber(req);
+        final Account account = accountRepository.getBy(accountNumber);
+        if (account == null) {
+            res.status(404);
+            return getMessage("Account Not Found");
+        }
+        return mapToResponse(account);
+    }
+
+    private Object createAccount(Request req, Response res) throws java.io.IOException {
+        final CreateAccount createAccount = mapBody(req, CreateAccount.class);
+        final Account account = createAccountUseCase.create(OwnerId.of(createAccount.getOwner()));
+        res.status(201);
+        return mapToResponse(account);
+    }
+
+    private void bedRequest(Exception e, Response response, Function<Exception, String> messageExtractor) {
+        LOGGER.warn("Wrong user data", e);
+        exceptionBodyWriter(response, messageExtractor.apply(e));
+        response.status(HTTP_BAD_REQUEST);
+    }
+
+    private void exceptionBodyWriter(spark.Response response, String message) {
         response.type(CONTENT_TYPE);
-        response.body(getMessage(e.getMessage()));
+        response.body(getMessage(message));
     }
 
     private String getMessage(String message) {
@@ -189,57 +197,97 @@ public class Endpoints {
         return AccountNumber.of(accountNumber);
     }
 
-    private String getTransactionStringResponse(Transaction transaction) throws JsonProcessingException {
-        final Response value = getTransactionResponse(transaction);
-        return objectMapper.writeValueAsString(value);
-    }
-
-    private String getResponseForListOfTransactions(List<Response> transactions, AccountNumber accountNumber) throws JsonProcessingException {
+    private RestfullResponse getResponseForListOfTransactions(List<RestfullResponse> transactions, AccountNumber accountNumber) {
         final ArrayList<Link> links = new ArrayList<>();
-        links.add(new Link("GET", replace(GET_ACCOUNT_LINK, accountNumber), "account"));
-        final Response response = new Response(transactions, links);
-        return objectMapper.writeValueAsString(response);
+        links.add(createLink(GET_ACCOUNT, "account", accountNumber));
+        return new RestfullResponse(transactions, links);
     }
 
-    private Response getTransactionResponse(Transaction transaction) {
+    private RestfullResponse mapToResponse(Transaction transaction) {
         final TransactionData transactionData = new TransactionData(transaction);
         final ArrayList<Link> links = new ArrayList<>();
-        links.add(new Link("GET", replace(GET_TRANSACTION_LINK, transaction), "self"));
-        links.add(new Link("GET", replace(GET_ACCOUNT_LINK, transaction), "account"));
+        links.add(createLink(GET_TRANSACTION, "self", transaction));
+        links.add(createLink(GET_ACCOUNT, "account", transaction));
         if (transaction.transactionStatus() == TransactionStatus.CREATED) {
-            links.add(new Link("POST", replace(SETTLE_TRANSACTION_LINK, transaction), "settle"));
-            links.add(new Link("DELETE", replace(REJECT_TRANSACTION_LINK, transaction), "reject"));
+            links.add(createLink(SETTLE_TRANSACTION, "settle", transaction));
+            links.add(createLink(REJECT_TRANSACTION, "reject", transaction));
         }
-        return new Response(transactionData, links);
+        return new RestfullResponse(transactionData, links);
     }
 
-    private String replace(String link, Transaction transaction) {
-        return "http://localhost:" + Spark.port() +
-                link.replace(":transactionId", transaction.transactionId().toString())
-                        .replace(":accountNumber", transaction.transactionOwner().toString());
-    }
-
-    private String getAccountResponse(Account account) throws JsonProcessingException {
+    private RestfullResponse mapToResponse(Account account) {
         final AccountData accountData = new AccountData(account);
 
         final ArrayList<Link> links = new ArrayList<>();
-        links.add(new Link("GET", replace(GET_ACCOUNT_LINK, account), "self"));
-        links.add(new Link("GET", replace(GET_ALL_TRANSACTIONS_LINK, account), "transactions"));
-        links.add(new Link("POST", replace(CREATE_OUTGOING_TRANSACTION_LINK, account), "makeOutgoingTransaction"));
-        links.add(new Link("POST", replace(CREATE_INCOMING_TRANSACTION_LINK, account), "receiveIncomingTransaction"));
-        final Response value = new Response(accountData, links);
-        return objectMapper.writeValueAsString(value);
+        links.add(createLink(GET_ACCOUNT, "self", account));
+        links.add(createLink(GET_ALL_TRANSACTIONS, "transactions", account));
+        links.add(createLink(CREATE_OUTGOING_TRANSACTION, "makeOutgoingTransaction", account));
+        links.add(createLink(CREATE_INCOMING_TRANSACTION, "receiveIncomingTransaction", account));
+        return new RestfullResponse(accountData, links);
     }
 
-    private String replace(String link, Account account) {
+    private Link createLink(EndpointDefinition endpointDefinition, String relation, Object object) {
+        final String type = endpointDefinition.httpMethod().name();
+        final String href = resolveHref(endpointDefinition.path(), object);
+        return new Link(type, href, relation);
+    }
+
+    private String resolveHref(String href, Object object) {
+        if (object instanceof Account) {
+            return prepareHref(href, (Account) object);
+        } else if (object instanceof AccountNumber) {
+            return prepareHref(href, (AccountNumber) object);
+        } else if (object instanceof Transaction) {
+            return prepareHref(href, (Transaction) object);
+        } else {
+            throw new UnsupportedObjectType(object);
+        }
+    }
+
+    private String prepareHref(String link, Transaction transaction) {
+        return prepareHref(link, transaction.transactionOwner())
+                .replace(":transactionId", transaction.transactionId().toString());
+    }
+
+    private String prepareHref(String link, Account account) {
         final AccountNumber accountNumber = account.accountNumber();
-        return replace(link, accountNumber);
+        return prepareHref(link, accountNumber);
     }
 
-    private String replace(String link, AccountNumber accountNumber) {
+    private String prepareHref(String link, AccountNumber accountNumber) {
         return "http://localhost:" + Spark.port() +
                 link.replace(":accountNumber", accountNumber.toString());
     }
 
+    private void registerEndpoint(EndpointDefinition endpointDefinition, Route route) {
+        switch (endpointDefinition.httpMethod()) {
+            case GET:
+                get(endpointDefinition.path(), CONTENT_TYPE, route, this::writeAsJson);
+                break;
+            case POST:
+                post(endpointDefinition.path(), CONTENT_TYPE, route, this::writeAsJson);
+                break;
+            case DELETE:
+                delete(endpointDefinition.path(), CONTENT_TYPE, route, this::writeAsJson);
+                break;
+            default:
+                throw new NotSupportedHttpMethod(endpointDefinition.httpMethod());
+        }
+    }
 
+    private String writeAsJson(Object model) throws JsonProcessingException {
+        return objectMapper.writeValueAsString(model);
+    }
+
+    private class NotSupportedHttpMethod extends ProgrammaticException {
+        public NotSupportedHttpMethod(HttpMethod httpMethod) {
+            super("You are trying register not supported HttpMethod: " + httpMethod);
+        }
+    }
+
+    private class UnsupportedObjectType extends ProgrammaticException {
+        public UnsupportedObjectType(Object object) {
+            super("You are trying link unsupported object type: " + object.getClass());
+        }
+    }
 }
