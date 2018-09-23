@@ -1,8 +1,8 @@
 package pl.slawek.restbank.assertobject
 
-import pl.slawek.revolbank.common.Money
-import pl.slawek.revolbank.common.OwnerId
-import pl.slawek.revolbank.domain.Account
+import pl.slawek.restbank.common.Money
+import pl.slawek.restbank.common.OwnerId
+import pl.slawek.restbank.domain.Account
 
 class AccountAssertObject {
     private Account account;

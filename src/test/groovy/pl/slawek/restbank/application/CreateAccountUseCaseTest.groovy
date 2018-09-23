@@ -1,10 +1,10 @@
 package pl.slawek.restbank.application
 
 
-import pl.slawek.revolbank.common.OwnerId
-import pl.slawek.revolbank.domain.Account
+import pl.slawek.restbank.common.OwnerId
+import pl.slawek.restbank.domain.Account
 
-import static pl.slawek.revolbank.assertobject.AccountAssertObject.assertThat
+import static pl.slawek.restbank.assertobject.AccountAssertObject.assertThat
 
 class CreateAccountUseCaseTest extends BaseAccountSpecification {
     OwnerId ownerId = OwnerId.of("42")

@@ -1,11 +1,11 @@
 package pl.slawek.restbank.domain
 
 
-import pl.slawek.revolbank.common.Money
-import pl.slawek.revolbank.common.OwnerId
+import pl.slawek.restbank.common.Money
+import pl.slawek.restbank.common.OwnerId
 import spock.lang.Specification
 
-import static pl.slawek.revolbank.domain.TransactionStatus.CREATED
+import static pl.slawek.restbank.domain.TransactionStatus.CREATED
 
 class AccountTest extends Specification {
 

@@ -2,7 +2,7 @@ package pl.slawek.restbank.infrastructure.endpoints
 
 import groovyx.net.http.Method
 import groovyx.net.http.RESTClient
-import pl.slawek.revolbank.infrastructure.ApplicationRunner
+import pl.slawek.restbank.infrastructure.ApplicationRunner
 import spark.Spark
 import spock.lang.Shared
 import spock.lang.Specification

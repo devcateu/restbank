@@ -1,9 +1,9 @@
 package pl.slawek.restbank.application
 
-import pl.slawek.revolbank.common.Money
-import pl.slawek.revolbank.common.OwnerId
-import pl.slawek.revolbank.domain.*
-import pl.slawek.revolbank.infrastructure.db.MapRepositoriesImplementation
+import pl.slawek.restbank.common.Money
+import pl.slawek.restbank.common.OwnerId
+import pl.slawek.restbank.domain.*
+import pl.slawek.restbank.infrastructure.db.MapRepositoriesImplementation
 import spock.lang.Specification
 
 abstract class BaseAccountSpecification extends Specification {

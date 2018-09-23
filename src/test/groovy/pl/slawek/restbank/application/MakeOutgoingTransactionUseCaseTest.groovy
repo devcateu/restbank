@@ -1,10 +1,10 @@
 package pl.slawek.restbank.application
 
-import pl.slawek.revolbank.common.Money
-import pl.slawek.revolbank.domain.AccountNumber
-import pl.slawek.revolbank.domain.TransactionStatus
+import pl.slawek.restbank.common.Money
+import pl.slawek.restbank.domain.AccountNumber
+import pl.slawek.restbank.domain.TransactionStatus
 
-import static pl.slawek.revolbank.assertobject.AccountAssertObject.assertThat
+import static pl.slawek.restbank.assertobject.AccountAssertObject.assertThat
 
 class MakeOutgoingTransactionUseCaseTest extends BaseAccountSpecification {
     private MakeOutgoingTransactionUseCase useCase = new MakeOutgoingTransactionUseCase(accountRepository, transactionRepository)

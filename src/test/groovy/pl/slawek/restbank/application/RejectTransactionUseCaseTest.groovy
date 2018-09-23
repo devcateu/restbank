@@ -1,9 +1,9 @@
 package pl.slawek.restbank.application
 
-import pl.slawek.revolbank.common.Money
-import pl.slawek.revolbank.domain.AccountNumber
-import pl.slawek.revolbank.domain.TransactionId
-import pl.slawek.revolbank.domain.TransactionStatus
+import pl.slawek.restbank.common.Money
+import pl.slawek.restbank.domain.AccountNumber
+import pl.slawek.restbank.domain.TransactionId
+import pl.slawek.restbank.domain.TransactionStatus
 
 class RejectTransactionUseCaseTest extends BaseAccountSpecification {
 
