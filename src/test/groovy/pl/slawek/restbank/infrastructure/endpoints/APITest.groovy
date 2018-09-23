@@ -39,7 +39,7 @@ class APITest extends Specification {
         response.status == 400
 
         and: "message that owner is missing"
-        response.data.message == "Wrong message"
+        response.data.message == "Wrong input format"
     }
 
     def "trying registering account without owner should result in response with status 400 and information about lack owner"() {
