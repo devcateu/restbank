@@ -21,11 +21,12 @@ curl -X POST \
   -H 'Content-Type: application/json' \
   -d '{	"owner":"Chewbacca" }'
   
-**request body sample: **
+**request body sample:**
+
 <table>
-<tr><td>relation</td><td>sample body</td><td>Description</td></tr>
-<tr><td>settle</td><td>/{}</td><td>empty body, settle outgoing transaction</td></tr>
-<tr><td>reject</td><td>/{}</td><td>empty body, reject outgoing transaction</td></tr>
-<tr><td>makeOutgoingTransaction</td><td>{ "destination":"43", "amount": "2" }</td><td>make outgoing transaction (from account); destination - destination account, amount -amount of transaction</td><td></td></tr>
-<tr><td>receiveIncomingTransaction</td><td>{ "source":"43", "amount": "2" }</td><td>inform system about incoming transaction (to account); source - source account, amount -amount of transaction</td><td></td></tr>
+<tr><td><b>relation</b> </td><td><b>sample body</b></td><td><b>Description</b></td></tr>
+<tr><td>settle</td><td>{}</td><td>empty body, settle outgoing transaction</td></tr>
+<tr><td>reject</td><td>{}</td><td>empty body, reject outgoing transaction</td></tr>
+<tr><td>makeOutgoingTransaction</td><td>{ "destination":"43", "amount": "2" }</td><td>make outgoing transaction (from account); destination - destination account, amount -amount of transaction</td></tr>
+<tr><td>receiveIncomingTransaction</td><td>{ "source":"43", "amount": "2" }</td><td>inform system about incoming transaction (to account); source - source account, amount -amount of transaction</td></tr>
 </table>
