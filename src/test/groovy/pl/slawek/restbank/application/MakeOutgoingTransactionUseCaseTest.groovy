@@ -2,7 +2,6 @@ package pl.slawek.restbank.application
 
 import pl.slawek.restbank.common.Money
 import pl.slawek.restbank.domain.AccountNumber
-import pl.slawek.restbank.domain.TransactionStatus
 
 import static pl.slawek.restbank.assertobject.AccountAssertObject.assertThat
 
@@ -31,35 +30,6 @@ class MakeOutgoingTransactionUseCaseTest extends BaseAccountSpecification {
 
         then:
         thrown(SourceAccountDoesNotExist)
-    }
-
-    def "when the transaction is internal, the destination account should be credited"() {
-        given:
-        def source = AccountNumber.of("xzx")
-        createAccountWithBalance500For(source)
-        def destination = AccountNumber.of("destination")
-        createAccountWithBalance500For(destination)
-
-        when:
-        useCase.makeTransaction(new Transfer(source, destination, Money.of(200)))
-
-        then:
-        def account = accountRepository.getBy(destination)
-        assertThat(account).hasBalance(Money.of(700))
-    }
-
-    def "when the transaction is internal, Transaction should be settled"() {
-        given:
-        def source = AccountNumber.of("xzx")
-        createAccountWithBalance500For(source)
-        def destination = AccountNumber.of("destination")
-        createAccountWithBalance500For(destination)
-
-        when:
-        def transaction = useCase.makeTransaction(new Transfer(source, destination, Money.of(200)))
-
-        then:
-        transaction.transactionStatus == TransactionStatus.SETTLED
     }
 
     def "when amount of transfer is equal 0 should throw exception"() {
