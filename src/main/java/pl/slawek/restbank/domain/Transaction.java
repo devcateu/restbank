@@ -1,5 +1,6 @@
 package pl.slawek.restbank.domain;
 
+import pl.slawek.restbank.common.Lists;
 import pl.slawek.restbank.common.Money;
 import pl.slawek.restbank.common.Validations;
 import pl.slawek.restbank.domain.events.*;
@@ -19,6 +20,7 @@ public class Transaction {
     private TransactionStatus transactionStatus;
     private ZonedDateTime modificationDate;
     private List<TransactionalEvent> eventsToSave = new ArrayList<>();
+    private ZonedDateTime lastSavedEventDate;
 
     private Transaction() {
 
@@ -27,6 +29,7 @@ public class Transaction {
     public static Transaction of(List<TransactionalEvent> events) {
         final Transaction transaction = new Transaction();
         events.forEach(transaction::apply);
+        transaction.lastSavedEventDate = Lists.getLastElement(events).occurred();
         transaction.validate();
         transaction.eventsToSave.clear();
         return transaction;
@@ -74,6 +77,10 @@ public class Transaction {
 
     public ZonedDateTime modificationDate() {
         return modificationDate;
+    }
+
+    public ZonedDateTime lastSavedEventDate() {
+        return lastSavedEventDate;
     }
 
     @Override

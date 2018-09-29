@@ -1,17 +1,21 @@
 package pl.slawek.restbank.infrastructure.db;
 
+import pl.slawek.restbank.common.Lists;
 import pl.slawek.restbank.domain.*;
 import pl.slawek.restbank.domain.events.AccountEvent;
 import pl.slawek.restbank.domain.events.TransactionalEvent;
 
+import java.time.ZonedDateTime;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
+import static java.util.stream.Collectors.*;
 
 public class MapRepositoriesImplementation implements AccountRepository, TransactionRepository {
 
-    private Map<AccountNumber, List<AccountEvent>> accountStore = new HashMap<>();
-    private Map<TransactionalMapKey, List<TransactionalEvent>> transactionStore = new HashMap<>();
+    private ConcurrentHashMap<AccountNumber, List<AccountEvent>> accountStore = new ConcurrentHashMap<>();
 
     private AtomicLong accountNumberGenerator = new AtomicLong(0);
     private AtomicLong transactionIdGenerator = new AtomicLong(0);
@@ -24,7 +28,14 @@ public class MapRepositoriesImplementation implements AccountRepository, Transac
 
     @Override
     public void save(Account account) {
-        storeEvents(account.notSavedEvents());
+        accountStore.merge(account.accountNumber(), new ArrayList<>(account.notSavedEvents()), (fromMap, fromParameter) -> {
+            if (Lists.getLastElement(fromMap).occurred().equals(account.lastSavedEventDate())) {
+                fromMap.addAll(fromParameter);
+                return fromMap;
+            } else {
+                throw new ConcurrentModificationException("Noo");
+            }
+        });
     }
 
     @Override
@@ -50,9 +61,9 @@ public class MapRepositoriesImplementation implements AccountRepository, Transac
 
     @Override
     public Transaction getBy(AccountNumber accountNumber, TransactionId transactionId) {
-        TransactionalMapKey key = new TransactionalMapKey(accountNumber, transactionId);
-        List<TransactionalEvent> transactionalEvents = transactionStore.get(key);
-        if (transactionalEvents == null) {
+        List<TransactionalEvent> transactionalEvents = getEventsFor(accountStore.get(accountNumber), transactionId)
+                .collect(toList());
+        if (transactionalEvents.isEmpty()) {
             return null;
         } else {
             return Transaction.of(transactionalEvents);
@@ -61,72 +72,46 @@ public class MapRepositoriesImplementation implements AccountRepository, Transac
 
     @Override
     public void save(Transaction transaction) {
-        storeEvents(transaction.notSavedEvents());
+        if (transaction.notSavedEvents().isEmpty()) {
+            return;
+        }
+        accountStore.compute(transaction.transactionOwner(), (accountNumber, accountEvents) -> {
+            if (accountEvents == null) {
+                throw new ConcurrentModificationException("Account should be saved before creating Transaction!");
+            }
+            final Optional<ZonedDateTime> max = getEventsFor(accountEvents, transaction.transactionId())
+                    .max(Comparator.comparing(AccountEvent::occurred))
+                    .map(AccountEvent::occurred);
+
+            if (max.isPresent() && !max.get().equals(transaction.lastSavedEventDate())) {
+                throw new ConcurrentModificationException("Before saving event somebody change Transaction!");
+            }
+            accountEvents.addAll(transaction.notSavedEvents());
+            return accountEvents;
+
+        });
     }
 
     @Override
     public List<Transaction> getAll(AccountNumber accountNumber) {
-        return transactionStore.keySet()
-                .stream()
-                .filter(key -> key.accountNumber.equals(accountNumber))
-                .map(key -> transactionStore.get(key))
-                .map(Transaction::of)
-                .collect(Collectors.toList());
+        return new ArrayList<>(getTransactionalEvents(accountStore.get(accountNumber))
+                .collect(groupingBy(TransactionalEvent::transactionId, collectingAndThen(toList(), Transaction::of)))
+                .values());
     }
-
 
     //for test purpose
     void clean() {
         accountStore.clear();
-        transactionStore.clear();
     }
 
-    //TODO test?
-    private void storeEvents(List<? extends AccountEvent> events) {
-        events.stream()
-                .peek(this::storeAccountEvent)
+    private Stream<TransactionalEvent> getEventsFor(List<AccountEvent> accountEvents, TransactionId transactionId) {
+        return getTransactionalEvents(accountEvents)
+                .filter(event -> event.transactionId().equals(transactionId));
+    }
+
+    private Stream<TransactionalEvent> getTransactionalEvents(List<AccountEvent> accountEvents) {
+        return accountEvents.stream()
                 .filter(event -> event instanceof TransactionalEvent)
-                .forEach(event -> storeTransactionalEvents((TransactionalEvent) event));
-    }
-
-    private void storeAccountEvent(AccountEvent event) {
-        List<AccountEvent> accountEvents = getListForEvent(event.accountNumber(), accountStore);
-        accountEvents.add(event);
-    }
-
-    private void storeTransactionalEvents(TransactionalEvent event) {
-        TransactionalMapKey key = new TransactionalMapKey(event.accountNumber(), event.transactionId());
-        List<TransactionalEvent> accountEvents = getListForEvent(key, transactionStore);
-        accountEvents.add(event);
-    }
-
-    private <E, K> List<E> getListForEvent(K key, Map<K, List<E>> map) {
-        List<E> events = map.computeIfAbsent(key, k -> new ArrayList<>());
-        map.put(key, events);
-        return events;
-    }
-
-    private final class TransactionalMapKey {
-        private final AccountNumber accountNumber;
-        private final TransactionId transactionId;
-
-        TransactionalMapKey(AccountNumber accountNumber, TransactionId transactionId) {
-            this.accountNumber = accountNumber;
-            this.transactionId = transactionId;
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-            TransactionalMapKey that = (TransactionalMapKey) o;
-            return Objects.equals(accountNumber, that.accountNumber) &&
-                    Objects.equals(transactionId, that.transactionId);
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(accountNumber, transactionId);
-        }
+                .map(event -> (TransactionalEvent) event);
     }
 }

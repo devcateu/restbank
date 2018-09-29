@@ -1,5 +1,6 @@
 package pl.slawek.restbank.domain;
 
+import pl.slawek.restbank.common.Lists;
 import pl.slawek.restbank.common.Money;
 import pl.slawek.restbank.common.OwnerId;
 import pl.slawek.restbank.common.Validations;
@@ -16,6 +17,7 @@ public class Account {
     private List<AccountEvent> accountEvents = new ArrayList<>();
     private Money balance = Money.of(0);
     private ZonedDateTime lastUpdate;
+    private ZonedDateTime lastSavedEventDate;
 
     private Account() {
 
@@ -28,9 +30,8 @@ public class Account {
 
     public static Account of(List<AccountEvent> events) {
         final Account account = new Account();
-        for (AccountEvent event : events) {
-            account.applyEvent(event);
-        }
+        events.forEach(account::applyEvent);
+        account.lastSavedEventDate = Lists.getLastElement(events).occurred();
         account.validate();
         account.accountEvents.clear();
         return account;
@@ -63,6 +64,10 @@ public class Account {
 
     public ZonedDateTime lastUpdate() {
         return lastUpdate;
+    }
+
+    public ZonedDateTime lastSavedEventDate() {
+        return lastSavedEventDate;
     }
 
     public List<AccountEvent> notSavedEvents() {

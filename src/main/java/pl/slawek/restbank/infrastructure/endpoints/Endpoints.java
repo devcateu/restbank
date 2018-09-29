@@ -17,11 +17,11 @@ import spark.*;
 
 import java.lang.invoke.MethodHandles;
 import java.util.ArrayList;
+import java.util.ConcurrentModificationException;
 import java.util.List;
 import java.util.function.Function;
 
-import static java.net.HttpURLConnection.HTTP_BAD_REQUEST;
-import static java.net.HttpURLConnection.HTTP_INTERNAL_ERROR;
+import static java.net.HttpURLConnection.*;
 import static java.util.stream.Collectors.toList;
 import static spark.Spark.*;
 
@@ -75,6 +75,11 @@ public class Endpoints {
         exception(MismatchedInputException.class, (e, request, response) -> bedRequest(e, response, ex -> "Wrong input format"));
         exception(BusinessException.class, (e, request, response) -> bedRequest(e, response, Throwable::getMessage));
         exception(ValidationException.class, (e, request, response) -> bedRequest(e, response, Throwable::getMessage));
+        exception(ConcurrentModificationException.class, (e, request, response) -> {
+            LOGGER.error("Concurrency Modification", e);
+            exceptionBodyWriter(response, e.getMessage());
+            response.status(HTTP_CONFLICT);
+        });
         exception(Exception.class, (e, request, response) -> {
             LOGGER.error("Internal server error", e);
             exceptionBodyWriter(response, e.getMessage());
@@ -102,7 +107,7 @@ public class Endpoints {
         final Transaction transaction = transactionRepository.getBy(accountNumber, transactionId);
 
         if (transaction == null) {
-            res.status(404);
+            res.status(HTTP_NOT_FOUND);
             return getMessage("Transaction Not Found");
         }
         return mapToResponse(transaction);
@@ -111,7 +116,7 @@ public class Endpoints {
     private Object getAllTransactions(Request req, Response res) {
         final AccountNumber accountNumber = getAccountNumber(req);
         if (!accountRepository.exist(accountNumber)) {
-            res.status(404);
+            res.status(HTTP_NOT_FOUND);
             return getMessage("Account Not Found");
         }
         final List<Transaction> transaction = transactionRepository.getAll(accountNumber);
@@ -124,7 +129,7 @@ public class Endpoints {
         final AccountNumber accountNumber = getAccountNumber(req);
         final MakeIncomingTransactionData makeIncomingTransactionData = mapBody(req, MakeIncomingTransactionData.class);
         final Transaction transaction = makeIncomingTransaction(accountNumber, makeIncomingTransactionData);
-        res.status(201);
+        res.status(HTTP_CREATED);
         return mapToResponse(transaction);
     }
 
@@ -132,7 +137,7 @@ public class Endpoints {
         final AccountNumber accountNumber = getAccountNumber(req);
         final MakeOutgoingTransactionData makeOutgoingTransactionData = mapBody(req, MakeOutgoingTransactionData.class);
         final Transaction transaction = makeOutgoingTransaction(accountNumber, makeOutgoingTransactionData);
-        res.status(201);
+        res.status(HTTP_CREATED);
         return mapToResponse(transaction);
     }
 
@@ -140,7 +145,7 @@ public class Endpoints {
         final AccountNumber accountNumber = getAccountNumber(req);
         final Account account = accountRepository.getBy(accountNumber);
         if (account == null) {
-            res.status(404);
+            res.status(HTTP_NOT_FOUND);
             return getMessage("Account Not Found");
         }
         return mapToResponse(account);
@@ -149,7 +154,7 @@ public class Endpoints {
     private Object createAccount(Request req, Response res) throws java.io.IOException {
         final CreateAccount createAccount = mapBody(req, CreateAccount.class);
         final Account account = createAccountUseCase.create(OwnerId.of(createAccount.getOwner()));
-        res.status(201);
+        res.status(HTTP_CREATED);
         return mapToResponse(account);
     }
 
