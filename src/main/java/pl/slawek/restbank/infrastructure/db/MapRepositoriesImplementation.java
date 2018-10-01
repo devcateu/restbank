@@ -28,14 +28,8 @@ public class MapRepositoriesImplementation implements AccountRepository, Transac
 
     @Override
     public void save(Account account) {
-        accountStore.merge(account.accountNumber(), new ArrayList<>(account.notSavedEvents()), (fromMap, fromParameter) -> {
-            if (Lists.getLastElement(fromMap).occurred().equals(account.lastSavedEventDate())) {
-                fromMap.addAll(fromParameter);
-                return fromMap;
-            } else {
-                throw new ConcurrentModificationException("Noo");
-            }
-        });
+        accountStore.merge(account.accountNumber(), new ArrayList<>(account.notSavedEvents()),
+                (fromMap, fromParameter) -> mergeAccountEvent(account, fromMap, fromParameter));
     }
 
     @Override
@@ -75,21 +69,7 @@ public class MapRepositoriesImplementation implements AccountRepository, Transac
         if (transaction.notSavedEvents().isEmpty()) {
             return;
         }
-        accountStore.compute(transaction.transactionOwner(), (accountNumber, accountEvents) -> {
-            if (accountEvents == null) {
-                throw new ConcurrentModificationException("Account should be saved before creating Transaction!");
-            }
-            final Optional<ZonedDateTime> max = getEventsFor(accountEvents, transaction.transactionId())
-                    .max(Comparator.comparing(AccountEvent::occurred))
-                    .map(AccountEvent::occurred);
-
-            if (max.isPresent() && !max.get().equals(transaction.lastSavedEventDate())) {
-                throw new ConcurrentModificationException("Before saving event somebody change Transaction!");
-            }
-            accountEvents.addAll(transaction.notSavedEvents());
-            return accountEvents;
-
-        });
+        accountStore.compute(transaction.transactionOwner(), (accountNumber, accountEvents) -> appendTransactionalEvent(transaction, accountEvents));
     }
 
     @Override
@@ -102,6 +82,30 @@ public class MapRepositoriesImplementation implements AccountRepository, Transac
     //for test purpose
     void clean() {
         accountStore.clear();
+    }
+
+    private List<AccountEvent> appendTransactionalEvent(Transaction transaction, List<AccountEvent> accountEvents) {
+        if (accountEvents == null) {
+            throw new ConcurrentModificationException("Account should be saved before creating Transaction!");
+        }
+        final Optional<ZonedDateTime> max = getEventsFor(accountEvents, transaction.transactionId())
+                .max(Comparator.comparing(AccountEvent::occurred))
+                .map(AccountEvent::occurred);
+
+        if (max.isPresent() && !max.get().equals(transaction.lastSavedEventDate())) {
+            throw new ConcurrentModificationException("Before saving event somebody change Transaction!");
+        }
+        accountEvents.addAll(transaction.notSavedEvents());
+        return accountEvents;
+    }
+
+    private List<AccountEvent> mergeAccountEvent(Account account, List<AccountEvent> fromMap, List<AccountEvent> fromParameter) {
+        if (Lists.getLastElement(fromMap).occurred().equals(account.lastSavedEventDate())) {
+            fromMap.addAll(fromParameter);
+            return fromMap;
+        } else {
+            throw new ConcurrentModificationException("Noo");
+        }
     }
 
     private Stream<TransactionalEvent> getEventsFor(List<AccountEvent> accountEvents, TransactionId transactionId) {
